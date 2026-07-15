@@ -1,0 +1,242 @@
+Github Copilot License Request and Setup Guide
+A.	Github Copilot License:
+
+1.	Go to https://wiprocio.service-now.com/sp and search for “Github Copilot” on the search bar of the landing page as below. In the drop down select the option “Service Request for GitHub Copilot Standalone License (WC4C)
+
+ 
+
+2.	In the subsequent requisition form, enter the details and submit the request. 
+3.	Once the request is processed, you would receive a confirmation of license allotment usually within 24 hours.
+4.	Meanwhile, you should have also received a mail from “Github” email ID confirming your license and the mail would contain the user-id   that you need to use to sign-in when you add the “Github Copilot Chat” extension on your VS Code IDE.
+
+B.	VS Code (Visual Studio Code) IDE Installation
+a.	We will be using VS Code IDE during this training. 
+b.	In case you do not have the VS Code IDE on your machine, raise a requisition for the same https://wiprocio.service-now.com/sp  -> "other portals" tab -> catalog -> left panel in the "Explore Catalog" section choose "software request" and expand it to see -> Open Source -> search for “"Visual Studio code" software (preferably version 1.92 or above)  (This will be an Integrated Development Environment (IDE) and fill in the details (for the option - 'purpose of usage' you can choose "Evaluation or Training".
+
+C.	Install the “GitHub Copilot Chat” extensions on VS Code IDE
+a.	Install the “GitHub Copilot Chat” extensions on VS Code IDE
+b.	In earlier versions, installing the “Github Copilot” extension also was needed, but now, this is deprecated.
+ 
+c.	Once the extension is successfully added, in the left bottom accounts icon, you can sign-in to your account using the user-id that you had received earlier from a Github mail. 
+
+ 
+
+d.	Since the user-id is enabled with SSO (Single Sign-On), a password entry is not needed.
+e.	Once the sign-in is successful, you should be able to now start using the Github Copilot and its features in your IDE
+
+
+Step1: Install dependencies
+Add the MCP SDK and zod dependency (needs Node 18+)
+ (Zod is a TypeScript-first schema validation library that provides a simple and powerful way to define, validate, and transform data structures. Zod is widely used in various applications, including API validation, form validation, and runtime type checking)
+npm install @modelcontextprotocol/sdk
+npm install zod
+
+Step2: Create MCP server 
+create a new server entry file in the project root with this content: (bank-server.js)
+// Import required dependencies from the Model Context Protocol SDK
+const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
+const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
+const { z } = require("zod");
+
+// Sample bank accounts data with id, customer name, and account balance
+const accounts = [
+    { id: 1, name: "Alice", balance: 5000.0 },      // Alice's account with $5000
+    { id: 2, name: "Bob", balance: 3200.5 },        // Bob's account with $3200.50
+    { id: 3, name: "Charlie", balance: 150.75 }     // Charlie's account with $150.75
+];
+
+// Initialize the MCP server with name and version
+const server = new McpServer({
+  name: "bank-demo-server",
+  version: "1.0.0"
+});
+
+// Tool 1: List all customer accounts
+server.registerTool(
+  "list_accounts",
+  {
+    description: "Return all customer accounts",
+    inputSchema: {} // No input parameters required
+  },
+  async () => {
+    // Return all accounts in both text and structured formats
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(accounts, null, 2)
+        }
+      ],
+      structuredContent: {
+        accounts
+      }
+    };
+  }
+);
+
+// Tool 2: Get a specific account by its numeric ID
+server.registerTool(
+  "get_account_by_id",
+  {
+    description: "Get a customer account by numeric id",
+    inputSchema: {
+      // Define input parameter: id must be a positive integer
+      id: z.number().int().positive().describe("Customer account id")
+    }
+  },
+  async ({ id }) => {
+    // Search for account with matching ID
+    const account = accounts.find((item) => item.id === id);
+
+    // Return error if account not found
+    if (!account) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `No account found for id ${id}`
+          }
+        ],
+        isError: true
+      };
+    }
+
+    // Return the found account
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(account, null, 2)
+        }
+      ],
+      structuredContent: {
+        account
+      }
+    };
+  }
+);
+
+// Tool 3: Find accounts with balance below a threshold
+server.registerTool(
+  "find_accounts_below_balance",
+  {
+    description: "Find accounts with balance less than or equal to a maximum amount",
+    inputSchema: {
+      // Define input parameter: maximum balance threshold (non-negative)
+      maxBalance: z.number().nonnegative().describe("Maximum balance")
+    }
+  },
+  async ({ maxBalance }) => {
+    // Filter accounts matching the balance criteria
+    const matches = accounts.filter((item) => item.balance <= maxBalance);
+
+    // Return matching accounts with count
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(matches, null, 2)
+        }
+      ],
+      structuredContent: {
+        matches,
+        count: matches.length
+      }
+    };
+  }
+);
+
+// Main function to start the server
+async function main() {
+  // Create stdio transport for server communication
+  const transport = new StdioServerTransport();
+  // Connect server to transport
+  await server.connect(transport);
+  console.error("bank-demo-server is running over stdio");
+}
+
+// Execute main function and handle any errors
+main().catch((error) => {
+  console.error("Server error:", error);
+  process.exit(1);
+});
+
+Step 3: Add a Script to your package.json (Optional)
+{
+  "scripts": {
+    "mcp:bank": "node bank-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.0.0"
+  }
+}
+
+Step 4: Register the Server in VS Code
+Invoke the Command Palette (ctrl+shift+p) and then type or select: MCP: Open workspace Folder Configuration
+This opens the workspace MCP config file. Put below into it: (this is preferred on Windows) (Current project folder -> .vscode/mcp.json)
+{
+  "servers": {
+    "bank-demo": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["bank-server.js"]
+    }
+  }
+}
+Explanation: A stdio MCP server is a locally launched process that speaks the MCP protocol through standard input/output pipes rather than over a web endpoint.
+
+Alternatively if using the npm script:
+{
+  "servers": {
+    "bank-demo": {
+      "type": "stdio",
+      "command": "npm",
+      "args": ["run", "mcp:bank"]
+    }
+  }
+}
+Step 5: Start and Trust the Server. After saving the MCP configuration:
+a.	VS Code should detect the new server
+b.	You will be asked whether to trust it
+c.	Accept the trust prompt
+d.	Using command palette -> Run -> MCP: List Servers if needed and start it manually.
+e.	Open Chat and use Configure Tools to verify the server tools are enabled
+
+If server fails to start, use: command palette-> 
+
+MCP: List Servers
+
+Then choose:
+
+Show Output
+
+That log is the fastest way to diagnose MCP startup issues
+
+Step 6: Use it in Chat
+Once the server is running, you can ask copilot things like
+
+•	Use the bank-demo MCP tools to list all customer accounts.
+
+•	Use the get_account_by_id tool for id 2 and summarize the result.
+
+•	Which customer has the lowest balance? Use the MCP tools.
+
+•	Find all accounts with balance below 1000.
+
+(For a training session, be explicit with the tool usage in the prompt. That’s makes the demo more reliable than waiting for the model to decide on its own)
+
+Good Demo Flow:
+
+A simple training sequence:
+a.	List all accounts using the MCP tool
+b.	Get account id 1
+c.	Find accounts below 1000
+d.	Who has the smallest balance
+e.	Summarize the dataset as a banker would
+
+That shows:
+a.	Tool discovery
+b.	Tool invocation
+c.	Parameter passing
+d.	Model reasoning on top of tool output
