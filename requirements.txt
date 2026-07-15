@@ -1,0 +1,4 @@
+fastmcp
+langgraph
+langchain-anthropic
+python-dotenv
